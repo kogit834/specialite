@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
 import { Loader2, Mail } from "lucide-react";
 
 export function LoginForm() {
@@ -18,19 +17,38 @@ export function LoginForm() {
     setLoading(true);
     setError("");
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${location.origin}/auth/callback`,
-      },
-    });
+    try {
+      // Supabaseクライアントを経由せず直接REST APIを呼ぶ（非ASCII headerエラー回避）
+      const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\s/g, "");
+      const supabaseKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").replace(/\s/g, "");
 
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-    } else {
+      const res = await fetch(`${supabaseUrl}/auth/v1/otp`, {
+        method: "POST",
+        headers: {
+          "apikey": supabaseKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          create_user: true,
+          options: {
+            emailRedirectTo: `${location.origin}/auth/callback`,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error_description || data.msg || "送信に失敗しました");
+        setLoading(false);
+        return;
+      }
+
       setSent(true);
+    } catch (err) {
+      setError((err as Error).message || "ネットワークエラーが発生しました");
+    } finally {
+      setLoading(false);
     }
   }
 
