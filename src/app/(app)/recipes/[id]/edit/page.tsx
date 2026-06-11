@@ -1,11 +1,11 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { RecipeForm } from "@/components/recipe-form";
 
-export default async function NewRecipePage() {
+export default async function EditRecipePage({ params }: { params: { id: string } }) {
   const supabase = createClient();
   const {
     data: { user },
@@ -20,26 +20,51 @@ export default async function NewRecipePage() {
 
   if (!profile?.household_id) redirect("/setup");
 
+  const { data: recipe } = await supabase
+    .from("recipes")
+    .select("id, title, body, genre_id")
+    .eq("id", params.id)
+    .single();
+
+  if (!recipe) notFound();
+
   const { data: genres } = await supabase
     .from("genres")
     .select("id, name")
     .eq("household_id", profile.household_id)
     .order("sort_order");
 
+  const { data: photos } = await supabase
+    .from("recipe_photos")
+    .select("id, storage_path, caption, taken_on")
+    .eq("recipe_id", params.id)
+    .order("created_at");
+
+  const signedPhotos = await Promise.all(
+    (photos ?? []).map(async (p) => {
+      const { data } = await supabase.storage
+        .from("recipe-photos")
+        .createSignedUrl(p.storage_path, 3600);
+      return { ...p, url: data?.signedUrl ?? "" };
+    })
+  );
+
   return (
     <div className="p-4">
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/recipes">
+          <Link href={`/recipes/${params.id}`}>
             <ArrowLeft size={20} />
           </Link>
         </Button>
-        <h1 className="text-xl font-bold">レシピを追加</h1>
+        <h1 className="text-xl font-bold">レシピを編集</h1>
       </div>
       <RecipeForm
         householdId={profile.household_id}
         userId={user.id}
         genres={genres ?? []}
+        recipe={recipe}
+        existingPhotos={signedPhotos}
       />
     </div>
   );
