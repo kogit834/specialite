@@ -28,9 +28,16 @@ export function LoginForm() {
         }),
       });
 
-      const data = await res.json();
+      let data: { ok?: boolean; error?: string } = {};
+      try {
+        const text = await res.text();
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        // レスポンスが空またはJSON以外の場合
+      }
+
       if (!res.ok) {
-        setError(data.error || "送信に失敗しました");
+        setError(data.error || `エラー (HTTP ${res.status})`);
         return;
       }
 
