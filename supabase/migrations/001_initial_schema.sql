@@ -53,6 +53,7 @@ begin
 end;
 $$ language plpgsql;
 
+drop trigger if exists recipes_updated_at on recipes;
 create trigger recipes_updated_at
   before update on recipes
   for each row execute function update_updated_at();
@@ -125,7 +126,3 @@ create policy "自世帯のレシピ写真を削除" on recipe_photos
   for delete using (
     recipe_id in (select id from recipes where household_id = my_household_id())
   );
-
--- Storageバケット（recipe-photosという名前で作成する）
--- ※ Supabaseダッシュボードか下記のコマンドで作成してください
--- insert into storage.buckets (id, name, public) values ('recipe-photos', 'recipe-photos', false);
