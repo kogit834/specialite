@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Camera, ImagePlus, X, Sparkles, Mic, MicOff } from "lucide-react";
+import { Loader2, Camera, ImagePlus, X, Sparkles, Mic, MicOff, Wand2 } from "lucide-react";
 
 type Genre = { id: string; name: string };
 type Recipe = { id: string; title: string; body: string; genre_id: string | null };
@@ -49,7 +49,9 @@ export function RecipeForm({
   const [classifying, setClassifying] = useState(false);
   const [error, setError] = useState("");
   const [recording, setRecording] = useState(false);
+  const [formatting, setFormatting] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const transcriptRef = useRef("");
 
   useEffect(() => {
     setSpeechSupported(
@@ -83,9 +85,10 @@ export function RecipeForm({
   function toggleRecording() {
     if (recording) {
       recognitionRef.current?.stop();
-      setRecording(false);
       return;
     }
+
+    transcriptRef.current = "";
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -97,14 +100,32 @@ export function RecipeForm({
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
-      let transcript = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
+        transcriptRef.current += event.results[i][0].transcript;
       }
-      setBody((prev) => (prev ? prev + "\n" + transcript : transcript));
     };
 
-    recognition.onend = () => setRecording(false);
+    recognition.onend = async () => {
+      setRecording(false);
+      const raw = transcriptRef.current.trim();
+      if (!raw) return;
+      setFormatting(true);
+      try {
+        const res = await fetch("/api/voice-to-recipe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript: raw, title }),
+        });
+        const data = await res.json();
+        if (data.body) setBody(data.body);
+      } catch {
+        // 整形失敗時はそのまま書き起こしを使う
+        setBody((prev) => (prev ? prev + "\n" + raw : raw));
+      } finally {
+        setFormatting(false);
+      }
+    };
+
     recognition.onerror = () => setRecording(false);
 
     recognitionRef.current = recognition;
@@ -204,14 +225,23 @@ export function RecipeForm({
             <button
               type="button"
               onClick={toggleRecording}
+              disabled={formatting}
               className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-colors ${
                 recording
                   ? "bg-destructive/10 text-destructive animate-pulse"
+                  : formatting
+                  ? "text-muted-foreground cursor-not-allowed"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {recording ? <MicOff size={13} /> : <Mic size={13} />}
-              {recording ? "停止" : "音声入力"}
+              {recording ? (
+                <MicOff size={13} />
+              ) : formatting ? (
+                <Wand2 size={13} className="animate-spin" />
+              ) : (
+                <Mic size={13} />
+              )}
+              {recording ? "停止" : formatting ? "AI整形中..." : "音声入力"}
             </button>
           )}
         </div>
@@ -225,7 +255,13 @@ export function RecipeForm({
         {recording && (
           <p className="text-xs text-destructive flex items-center gap-1">
             <span className="inline-block w-2 h-2 rounded-full bg-destructive animate-pulse" />
-            録音中… 停止ボタンで終了します
+            録音中… 停止ボタンで終了するとAIが整形します
+          </p>
+        )}
+        {formatting && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Wand2 size={12} className="animate-spin" />
+            音声をレシピに整形しています…
           </p>
         )}
       </div>
