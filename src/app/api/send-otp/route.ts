@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         email,
         create_user: true,
-        options: { emailRedirectTo: redirectTo },
+        options: { email_redirect_to: redirectTo },
       }),
     });
 
