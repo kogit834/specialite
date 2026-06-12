@@ -28,21 +28,20 @@ export function SetupForm({ userEmail }: { userEmail: string }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data: household, error: hErr } = await supabase
+    const householdId = crypto.randomUUID();
+    const { error: hErr } = await supabase
       .from("households")
-      .insert({ name: householdName })
-      .select()
-      .single();
+      .insert({ id: householdId, name: householdName });
 
-    if (hErr || !household) {
-      setError("世帯の作成に失敗しました: " + (hErr?.message ?? "不明"));
+    if (hErr) {
+      setError("世帯の作成に失敗しました: " + hErr.message);
       setLoading(false);
       return;
     }
 
     const { error: pErr } = await supabase
       .from("profiles")
-      .upsert({ id: user.id, display_name: displayName, household_id: household.id });
+      .upsert({ id: user.id, display_name: displayName, household_id: householdId });
 
     if (pErr) {
       setError("プロフィールの作成に失敗しました: " + (pErr?.message ?? "不明"));
