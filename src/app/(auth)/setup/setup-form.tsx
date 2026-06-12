@@ -35,7 +35,7 @@ export function SetupForm({ userEmail }: { userEmail: string }) {
       .single();
 
     if (hErr || !household) {
-      setError("世帯の作成に失敗しました");
+      setError("世帯の作成に失敗しました: " + (hErr?.message ?? "不明"));
       setLoading(false);
       return;
     }
@@ -45,7 +45,7 @@ export function SetupForm({ userEmail }: { userEmail: string }) {
       .upsert({ id: user.id, display_name: displayName, household_id: household.id });
 
     if (pErr) {
-      setError("プロフィールの作成に失敗しました");
+      setError("プロフィールの作成に失敗しました: " + (pErr?.message ?? "不明"));
       setLoading(false);
       return;
     }
