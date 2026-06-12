@@ -9,50 +9,42 @@ export default function AuthCallbackPage() {
   const [message, setMessage] = useState("ログイン処理中...");
 
   useEffect(() => {
-    async function handleCallback() {
-      const supabase = createClient();
+    const supabase = createClient();
 
-      // createBrowserClientはURLフラグメント(#access_token=...)を自動検出してCookieに保存する
-      // 少し待ってセッションが確立されるのを待つ
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const { data, error } = await supabase.auth.getSession();
-
-      if (error || !data.session) {
-        // フラグメントからのセッション確立を再試行
-        const hash = window.location.hash;
-        if (hash) {
-          const params = new URLSearchParams(hash.substring(1));
-          const accessToken = params.get("access_token");
-          const refreshToken = params.get("refresh_token");
-
-          if (accessToken) {
-            const { error: setErr } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken ?? "",
-            });
-
-            if (!setErr) {
-              router.replace("/recipes");
-              return;
-            }
-          }
+    // onAuthStateChangeでセッション確立を待つ（implicit flowのフラグメント処理を含む）
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session) {
+          subscription.unsubscribe();
+          router.replace("/recipes");
+          return;
         }
-
-        setMessage("ログインに失敗しました。もう一度お試しください。");
-        setTimeout(() => router.replace("/login?error=auth_failed"), 2000);
-        return;
+        if (event === "SIGNED_OUT") {
+          subscription.unsubscribe();
+          router.replace("/login?error=auth_failed");
+        }
       }
+    );
 
-      router.replace("/recipes");
-    }
+    // 5秒でタイムアウト
+    const timer = setTimeout(() => {
+      subscription.unsubscribe();
+      setMessage("ログインに失敗しました。もう一度お試しください。");
+      setTimeout(() => router.replace("/login?error=auth_failed"), 2000);
+    }, 5000);
 
-    handleCallback();
+    return () => {
+      clearTimeout(timer);
+      subscription.unsubscribe();
+    };
   }, [router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-muted-foreground text-sm">{message}</p>
+      <div className="text-center space-y-2">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-muted-foreground text-sm">{message}</p>
+      </div>
     </div>
   );
 }
