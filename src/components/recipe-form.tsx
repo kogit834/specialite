@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Camera, X, Sparkles } from "lucide-react";
+import { Loader2, Camera, ImagePlus, X, Sparkles, Mic, MicOff } from "lucide-react";
 
 type Genre = { id: string; name: string };
 type Recipe = { id: string; title: string; body: string; genre_id: string | null };
@@ -35,7 +35,10 @@ export function RecipeForm({
   existingPhotos?: ExistingPhoto[];
 }) {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
   const [title, setTitle] = useState(recipe?.title ?? "");
   const [body, setBody] = useState(recipe?.body ?? "");
@@ -45,6 +48,15 @@ export function RecipeForm({
   const [loading, setLoading] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [error, setError] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  useEffect(() => {
+    setSpeechSupported(
+      typeof window !== "undefined" &&
+        ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
+    );
+  }, []);
 
   const remainingExisting = existingPhotos.filter((p) => !removedPhotoIds.includes(p.id));
 
@@ -66,6 +78,38 @@ export function RecipeForm({
     );
     setNewPhotos((prev) => [...prev, ...compressed]);
     e.target.value = "";
+  }
+
+  function toggleRecording() {
+    if (recording) {
+      recognitionRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognition: any = new SR();
+    recognition.lang = "ja-JP";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setBody((prev) => (prev ? prev + "\n" + transcript : transcript));
+    };
+
+    recognition.onend = () => setRecording(false);
+    recognition.onerror = () => setRecording(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setRecording(true);
   }
 
   async function handleClassify() {
@@ -103,7 +147,6 @@ export function RecipeForm({
           .update({ title, body, genre_id: genreId || null })
           .eq("id", recipe.id);
 
-        // 削除された写真を消す
         if (removedPhotoIds.length > 0) {
           const toDelete = existingPhotos.filter((p) => removedPhotoIds.includes(p.id));
           await supabase.storage
@@ -121,7 +164,6 @@ export function RecipeForm({
         recipeId = data.id;
       }
 
-      // 新しい写真をアップロード
       for (const p of newPhotos) {
         const ext = p.file.name.split(".").pop() ?? "jpg";
         const path = `${householdId}/${recipeId}/${Date.now()}.${ext}`;
@@ -157,14 +199,34 @@ export function RecipeForm({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="body">レシピ本文</Label>
+          {speechSupported && (
+            <button
+              type="button"
+              onClick={toggleRecording}
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-colors ${
+                recording
+                  ? "bg-destructive/10 text-destructive animate-pulse"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {recording ? <MicOff size={13} /> : <Mic size={13} />}
+              {recording ? "停止" : "音声入力"}
+            </button>
+          )}
         </div>
         <Textarea
           id="body"
-          placeholder="材料・手順を入力..."
+          placeholder={recording ? "話してください…" : "材料・手順を入力..."}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={8}
         />
+        {recording && (
+          <p className="text-xs text-destructive flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-destructive animate-pulse" />
+            録音中… 停止ボタンで終了します
+          </p>
+        )}
       </div>
 
       {genres.length > 0 && (
@@ -246,19 +308,37 @@ export function RecipeForm({
           ))}
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => cameraInputRef.current?.click()}
             className="aspect-square border-2 border-dashed border-muted-foreground/30 rounded-md flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary/50 transition-colors"
           >
-            <Camera size={24} />
-            <span className="text-xs">追加</span>
+            <Camera size={22} />
+            <span className="text-xs">カメラ</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => galleryInputRef.current?.click()}
+            className="aspect-square border-2 border-dashed border-muted-foreground/30 rounded-md flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary/50 transition-colors"
+          >
+            <ImagePlus size={22} />
+            <span className="text-xs">ライブラリ</span>
           </button>
         </div>
+        {/* カメラ専用 */}
         <input
-          ref={fileInputRef}
+          ref={cameraInputRef}
           type="file"
           accept="image/*"
           multiple
           capture="environment"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        {/* ローカルファイル選択 */}
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          multiple
           className="hidden"
           onChange={handleFileChange}
         />
@@ -272,8 +352,10 @@ export function RecipeForm({
             <Loader2 size={16} className="mr-2 animate-spin" />
             保存中...
           </>
+        ) : recipe ? (
+          "変更を保存"
         ) : (
-          recipe ? "変更を保存" : "レシピを保存"
+          "レシピを保存"
         )}
       </Button>
     </form>
