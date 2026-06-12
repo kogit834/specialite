@@ -9,34 +9,50 @@ export default function AuthCallbackPage() {
   const [message, setMessage] = useState("ログイン処理中...");
 
   useEffect(() => {
-    const supabase = createClient();
+    async function handleCallback() {
+      // URLフラグメント (#) からトークンを直接取得
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+      const errorParam = params.get("error");
+      const errorDescription = params.get("error_description");
 
-    // onAuthStateChangeでセッション確立を待つ（implicit flowのフラグメント処理を含む）
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === "SIGNED_IN" && session) {
-          subscription.unsubscribe();
+      if (errorParam) {
+        setMessage(`エラー: ${errorDescription ?? errorParam}`);
+        setTimeout(() => router.replace("/login?error=auth_failed"), 2000);
+        return;
+      }
+
+      if (!accessToken) {
+        // フラグメントなし → 既存セッション確認
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
           router.replace("/recipes");
           return;
         }
-        if (event === "SIGNED_OUT") {
-          subscription.unsubscribe();
-          router.replace("/login?error=auth_failed");
-        }
+        setMessage("ログインリンクが無効です。もう一度お試しください。");
+        setTimeout(() => router.replace("/login?error=auth_failed"), 2000);
+        return;
       }
-    );
 
-    // 5秒でタイムアウト
-    const timer = setTimeout(() => {
-      subscription.unsubscribe();
-      setMessage("ログインに失敗しました。もう一度お試しください。");
-      setTimeout(() => router.replace("/login?error=auth_failed"), 2000);
-    }, 5000);
+      const supabase = createClient();
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken ?? "",
+      });
 
-    return () => {
-      clearTimeout(timer);
-      subscription.unsubscribe();
-    };
+      if (error) {
+        setMessage("ログインに失敗しました。もう一度お試しください。");
+        setTimeout(() => router.replace("/login?error=auth_failed"), 2000);
+        return;
+      }
+
+      router.replace("/recipes");
+    }
+
+    handleCallback();
   }, [router]);
 
   return (
