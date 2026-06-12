@@ -93,7 +93,7 @@ export function RecipeForm({
     setError("");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createClient() as any;
+    const supabase = createClient();
 
     try {
       let recipeId = recipe?.id;

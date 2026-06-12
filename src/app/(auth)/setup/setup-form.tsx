@@ -24,7 +24,7 @@ export function SetupForm({ userEmail }: { userEmail: string }) {
     setError("");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createClient() as any;
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -60,7 +60,7 @@ export function SetupForm({ userEmail }: { userEmail: string }) {
     setError("");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createClient() as any;
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 

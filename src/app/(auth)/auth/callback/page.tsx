@@ -10,56 +10,41 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     async function handleCallback() {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any;
+      const supabase = createClient();
 
-      // URLフラグメント（#access_token=...）を処理
+      // createBrowserClientはURLフラグメント(#access_token=...)を自動検出してCookieに保存する
+      // 少し待ってセッションが確立されるのを待つ
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       const { data, error } = await supabase.auth.getSession();
 
-      if (error) {
+      if (error || !data.session) {
+        // フラグメントからのセッション確立を再試行
+        const hash = window.location.hash;
+        if (hash) {
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get("access_token");
+          const refreshToken = params.get("refresh_token");
+
+          if (accessToken) {
+            const { error: setErr } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken ?? "",
+            });
+
+            if (!setErr) {
+              router.replace("/recipes");
+              return;
+            }
+          }
+        }
+
         setMessage("ログインに失敗しました。もう一度お試しください。");
         setTimeout(() => router.replace("/login?error=auth_failed"), 2000);
         return;
       }
 
-      if (data.session) {
-        router.replace("/recipes");
-        return;
-      }
-
-      // フラグメントからセッションを取得（Supabase implicit flow）
-      const hash = window.location.hash;
-      if (hash) {
-        const params = new URLSearchParams(hash.substring(1));
-        const accessToken = params.get("access_token");
-        const refreshToken = params.get("refresh_token");
-
-        if (accessToken) {
-          const { error: setErr } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken ?? "",
-          });
-
-          if (!setErr) {
-            router.replace("/recipes");
-            return;
-          }
-        }
-      }
-
-      // クエリパラメータのcode（PKCE flow）を処理
-      const searchParams = new URLSearchParams(window.location.search);
-      const code = searchParams.get("code");
-      if (code) {
-        const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
-        if (!exchErr) {
-          router.replace("/recipes");
-          return;
-        }
-      }
-
-      setMessage("ログインに失敗しました。もう一度お試しください。");
-      setTimeout(() => router.replace("/login?error=auth_failed"), 2000);
+      router.replace("/recipes");
     }
 
     handleCallback();
