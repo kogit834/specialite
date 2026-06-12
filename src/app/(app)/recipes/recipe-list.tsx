@@ -11,12 +11,11 @@ type Recipe = {
   created_at: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   genres: any;
-  recipe_photos: { storage_path: string }[];
+  recipe_photos: { signedUrl: string | null }[];
 };
 
 export function RecipeList({
   recipes,
-  supabaseUrl,
 }: {
   recipes: Recipe[];
   householdId: string;
@@ -33,10 +32,6 @@ export function RecipeList({
     );
   }
 
-  function getPhotoUrl(path: string) {
-    return `${supabaseUrl}/storage/v1/object/sign/recipe-photos/${path}`;
-  }
-
   return (
     <div className="grid grid-cols-2 gap-3">
       {recipes.map((recipe) => {
@@ -48,9 +43,9 @@ export function RecipeList({
             className="rounded-lg border bg-card overflow-hidden active:scale-95 transition-transform"
           >
             <div className="aspect-square bg-muted relative">
-              {photo ? (
+              {photo?.signedUrl ? (
                 <Image
-                  src={getPhotoUrl(photo.storage_path)}
+                  src={photo.signedUrl}
                   alt={recipe.title}
                   fill
                   className="object-cover"

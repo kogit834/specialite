@@ -50,7 +50,24 @@ export default async function RecipesPage({
     query = query.ilike("title", `%${searchParams.q}%`);
   }
 
-  const { data: recipes } = await query;
+  const { data: rawRecipes } = await query;
+
+  // サムネイル用に署名付きURLを生成
+  const recipes = await Promise.all(
+    (rawRecipes ?? []).map(async (recipe) => {
+      const firstPhoto = recipe.recipe_photos?.[0];
+      if (firstPhoto) {
+        const { data } = await supabase.storage
+          .from("recipe-photos")
+          .createSignedUrl(firstPhoto.storage_path, 3600);
+        return {
+          ...recipe,
+          recipe_photos: [{ signedUrl: data?.signedUrl ?? null }],
+        };
+      }
+      return { ...recipe, recipe_photos: [] };
+    })
+  );
 
   return (
     <div className="p-4">
