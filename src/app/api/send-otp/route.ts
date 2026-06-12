@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export async function POST(request: Request) {
   try {
@@ -12,33 +13,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "環境変数が設定されていません" }, { status: 500 });
     }
 
-    const res = await fetch(`${supabaseUrl}/auth/v1/otp`, {
-      method: "POST",
-      headers: {
-        "apikey": supabaseKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email,
-        create_user: true,
-        redirect_to: redirectTo,
-      }),
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: redirectTo },
     });
 
-    // Supabase OTPは成功時に空ボディ(204)を返すこともある
-    const text = await res.text();
-    let data: Record<string, string> = {};
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = {};
-    }
-
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: data.error_description || data.msg || data.error || `HTTP ${res.status}` },
-        { status: res.status }
-      );
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     return NextResponse.json({ ok: true });
