@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, FileUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { RecipeList } from "./recipe-list";
@@ -56,11 +56,18 @@ export default async function RecipesPage({
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">得意料理</h1>
-        <Button size="icon" asChild>
-          <Link href="/recipes/new">
-            <Plus size={20} />
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="icon" variant="outline" asChild>
+            <Link href="/recipes/import" aria-label="一括取り込み">
+              <FileUp size={20} />
+            </Link>
+          </Button>
+          <Button size="icon" asChild>
+            <Link href="/recipes/new" aria-label="レシピを追加">
+              <Plus size={20} />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <RecipeSearch genres={genres ?? []} currentGenre={searchParams.genre} currentQ={searchParams.q} />
