@@ -49,8 +49,8 @@ export function ImportForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: rawText }),
       });
-      if (!res.ok) throw new Error("解析に失敗しました");
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "解析に失敗しました");
       const recipes: { title: string; body: string }[] = data.recipes ?? [];
       if (recipes.length === 0) {
         setError("レシピを抽出できませんでした。テキストを確認してください。");

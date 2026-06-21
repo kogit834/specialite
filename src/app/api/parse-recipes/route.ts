@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic();
-
 // メモ全文をレシピ単位に構造化するためのツール定義（structured output）
 const tool: Anthropic.Tool = {
   name: "register_recipes",
@@ -46,7 +44,17 @@ export async function POST(request: Request) {
   // 長文対策の上限（おおよそのトークン保護）
   const input = text.slice(0, 20000);
 
+  // APIキー未設定を明示的に検出（未設定だと messages.create() が即例外を投げる）
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error("[parse-recipes] ANTHROPIC_API_KEY が設定されていません");
+    return NextResponse.json(
+      { error: "サーバーにAPIキー(ANTHROPIC_API_KEY)が設定されていません" },
+      { status: 500 }
+    );
+  }
+
   try {
+    const client = new Anthropic();
     const message = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 8192,
@@ -83,7 +91,13 @@ ${input}`,
       .filter((r) => r.title || r.body);
 
     return NextResponse.json({ recipes: cleaned });
-  } catch {
-    return NextResponse.json({ error: "解析に失敗しました" }, { status: 500 });
+  } catch (err) {
+    // 実際のエラー内容をログとレスポンスに出して原因を特定できるようにする
+    const detail =
+      err instanceof Anthropic.APIError
+        ? `Anthropic APIエラー (${err.status}): ${err.message}`
+        : (err as Error)?.message ?? "不明なエラー";
+    console.error("[parse-recipes] 解析失敗:", detail);
+    return NextResponse.json({ error: `解析に失敗しました: ${detail}` }, { status: 500 });
   }
 }
