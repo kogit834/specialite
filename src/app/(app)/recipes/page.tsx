@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, FileUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { RecipeList } from "./recipe-list";
 import { RecipeSearch } from "./recipe-search";
@@ -11,25 +12,16 @@ export default async function RecipesPage({
 }: {
   searchParams: { label?: string; q?: string };
 }) {
+  const { householdId } = getAuthContext();
+  if (!householdId) redirect("/setup");
+
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("household_id")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile?.household_id) redirect("/setup");
 
   const [{ data: labelGroupsRaw }, recipesResult] = await Promise.all([
     supabase
       .from("label_groups")
       .select("id, name, sort_order, labels(id, name, sort_order)")
-      .eq("household_id", profile.household_id)
+      .eq("household_id", householdId)
       .order("sort_order"),
     (async () => {
       let query = supabase
@@ -39,7 +31,7 @@ export default async function RecipesPage({
            recipe_labels(label_id, labels(name, label_groups(name))),
            recipe_photos(storage_path)`
         )
-        .eq("household_id", profile.household_id)
+        .eq("household_id", householdId)
         .order("created_at", { ascending: false });
 
       if (searchParams.label) {
@@ -66,18 +58,28 @@ export default async function RecipesPage({
     ),
   }));
 
-  // サムネイル用署名付きURLを生成
-  const recipesWithThumbnails = await Promise.all(
-    (recipesResult.data ?? []).map(async (recipe) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const firstPhoto = (recipe.recipe_photos as any[])?.[0];
-      if (!firstPhoto) return { ...recipe, thumbnail_url: null };
-      const { data } = await supabase.storage
-        .from("recipe-photos")
-        .createSignedUrl(firstPhoto.storage_path, 3600);
-      return { ...recipe, thumbnail_url: data?.signedUrl ?? null };
-    })
-  );
+  // サムネイル用の署名付きURLを1リクエストでまとめて生成（件数ぶんの往復を1回に）
+  const recipesData = recipesResult.data ?? [];
+  const photoPaths = recipesData
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((r) => (r.recipe_photos as any[])?.[0]?.storage_path as string | undefined)
+    .filter((p): p is string => Boolean(p));
+
+  const urlMap = new Map<string, string>();
+  if (photoPaths.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from("recipe-photos")
+      .createSignedUrls(photoPaths, 3600);
+    signed?.forEach((s) => {
+      if (s.path && s.signedUrl) urlMap.set(s.path, s.signedUrl);
+    });
+  }
+
+  const recipesWithThumbnails = recipesData.map((recipe) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const path = (recipe.recipe_photos as any[])?.[0]?.storage_path as string | undefined;
+    return { ...recipe, thumbnail_url: path ? urlMap.get(path) ?? null : null };
+  });
 
   return (
     <div className="p-4">
@@ -105,7 +107,7 @@ export default async function RecipesPage({
 
       <RecipeList
         recipes={recipesWithThumbnails}
-        householdId={profile.household_id}
+        householdId={householdId}
       />
     </div>
   );

@@ -40,7 +40,8 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ログイン済みでプロフィール未設定なら /setup へ
+  // ログイン済みユーザーの世帯IDを取得（未設定なら /setup へ）
+  let householdId: string | null = null;
   if (user && !isPublicRoute) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -48,7 +49,8 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    if (!profile?.household_id) {
+    householdId = profile?.household_id ?? null;
+    if (!householdId) {
       const url = request.nextUrl.clone();
       url.pathname = "/setup";
       return NextResponse.redirect(url);
@@ -61,5 +63,21 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return supabaseResponse;
+  // 検証済みの認証情報を Server Component へ受け渡す。
+  // これで各ページが getUser() / profiles を再取得（ネットワーク往復）せずに済む。
+  // クライアントが偽装した値は必ず削除/上書きする（セキュリティ）。
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete("x-user-id");
+  requestHeaders.delete("x-user-email");
+  requestHeaders.delete("x-household-id");
+  if (user) {
+    requestHeaders.set("x-user-id", user.id);
+    requestHeaders.set("x-user-email", user.email ?? "");
+    if (householdId) requestHeaders.set("x-household-id", householdId);
+  }
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  // リフレッシュされた認証クッキーを引き継ぐ
+  supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+  return response;
 }

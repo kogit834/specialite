@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -6,11 +6,8 @@ import { Button } from "@/components/ui/button";
 import { DeleteSeedButton } from "./delete-seed-button";
 
 export default async function SeedDetailPage({ params }: { params: { id: string } }) {
+  // 認証は middleware で検証済み。データは RLS で保護される。
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   const { data: seed } = await supabase
     .from("seeds")

@@ -1,27 +1,28 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth";
 import { Settings } from "lucide-react";
 import { SettingsTabs } from "./settings-tabs";
 
 export default async function SettingsPage() {
+  const { userId, email, householdId } = getAuthContext();
+  if (!householdId) redirect("/setup");
+
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name, household_id, households(name)")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile?.household_id) redirect("/setup");
-
-  const { data: labelGroupsRaw } = await supabase
-    .from("label_groups")
-    .select("id, name, sort_order, labels(id, name, sort_order)")
-    .eq("household_id", profile.household_id)
-    .order("sort_order");
+  const [{ data: profile }, { data: labelGroupsRaw }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("display_name, households(name)")
+      .eq("id", userId)
+      .single(),
+    supabase
+      .from("label_groups")
+      .select("id, name, sort_order, labels(id, name, sort_order)")
+      .eq("household_id", householdId)
+      .order("sort_order"),
+  ]);
 
   const labelGroups = (labelGroupsRaw ?? []).map((g) => ({
     id: g.id,
@@ -43,10 +44,10 @@ export default async function SettingsPage() {
 
       <Suspense>
         <SettingsTabs
-          displayName={profile.display_name}
-          email={user.email ?? ""}
+          displayName={profile?.display_name ?? ""}
+          email={email}
           householdName={householdName}
-          householdId={profile.household_id}
+          householdId={householdId}
           labelGroups={labelGroups}
         />
       </Suspense>

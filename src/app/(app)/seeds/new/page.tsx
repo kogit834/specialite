@@ -1,24 +1,13 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { SeedForm } from "@/components/seed-form";
 
 export default async function NewSeedPage() {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("household_id")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile?.household_id) redirect("/setup");
+  const { userId, householdId } = getAuthContext();
+  if (!householdId) redirect("/setup");
 
   return (
     <div className="p-4">
@@ -30,7 +19,7 @@ export default async function NewSeedPage() {
         </Button>
         <h1 className="text-xl font-bold">タネを追加</h1>
       </div>
-      <SeedForm householdId={profile.household_id} userId={user.id} />
+      <SeedForm householdId={householdId} userId={userId} />
     </div>
   );
 }

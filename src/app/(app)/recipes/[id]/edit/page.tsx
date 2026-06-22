@@ -2,23 +2,15 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { RecipeForm } from "@/components/recipe-form";
 
 export default async function EditRecipePage({ params }: { params: { id: string } }) {
+  const { userId, householdId } = getAuthContext();
+  if (!householdId) redirect("/setup");
+
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("household_id")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile?.household_id) redirect("/setup");
 
   const [{ data: recipe }, { data: labelGroupsRaw }, { data: recipeLabels }, { data: photos }] =
     await Promise.all([
@@ -26,7 +18,7 @@ export default async function EditRecipePage({ params }: { params: { id: string 
       supabase
         .from("label_groups")
         .select("id, name, sort_order, labels(id, name, sort_order)")
-        .eq("household_id", profile.household_id)
+        .eq("household_id", householdId)
         .order("sort_order"),
       supabase.from("recipe_labels").select("label_id").eq("recipe_id", params.id),
       supabase
@@ -46,14 +38,21 @@ export default async function EditRecipePage({ params }: { params: { id: string 
     ),
   }));
 
-  const signedPhotos = await Promise.all(
-    (photos ?? []).map(async (p) => {
-      const { data } = await supabase.storage
-        .from("recipe-photos")
-        .createSignedUrl(p.storage_path, 3600);
-      return { ...p, url: data?.signedUrl ?? "" };
-    })
-  );
+  // 署名付きURLを1リクエストでまとめて生成
+  const photoList = photos ?? [];
+  const signedMap = new Map<string, string>();
+  if (photoList.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from("recipe-photos")
+      .createSignedUrls(
+        photoList.map((p) => p.storage_path),
+        3600
+      );
+    signed?.forEach((s) => {
+      if (s.path && s.signedUrl) signedMap.set(s.path, s.signedUrl);
+    });
+  }
+  const signedPhotos = photoList.map((p) => ({ ...p, url: signedMap.get(p.storage_path) ?? "" }));
 
   const initialLabelIds = (recipeLabels ?? []).map((rl) => rl.label_id);
 
@@ -68,8 +67,8 @@ export default async function EditRecipePage({ params }: { params: { id: string 
         <h1 className="text-xl font-bold">レシピを編集</h1>
       </div>
       <RecipeForm
-        householdId={profile.household_id}
-        userId={user.id}
+        householdId={householdId}
+        userId={userId}
         labelGroups={labelGroups}
         recipe={recipe}
         initialLabelIds={initialLabelIds}

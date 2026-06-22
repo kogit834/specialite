@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -7,11 +7,8 @@ import { PhotoGallery } from "./photo-gallery";
 import { DeleteRecipeButton } from "./delete-recipe-button";
 
 export default async function RecipeDetailPage({ params }: { params: { id: string } }) {
+  // 認証は middleware で検証済み。データは RLS で保護される。
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   const [{ data: recipe }, { data: photos }] = await Promise.all([
     supabase
@@ -28,14 +25,21 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
 
   if (!recipe) notFound();
 
-  const signedPhotos = await Promise.all(
-    (photos ?? []).map(async (p) => {
-      const { data } = await supabase.storage
-        .from("recipe-photos")
-        .createSignedUrl(p.storage_path, 3600);
-      return { ...p, url: data?.signedUrl ?? "" };
-    })
-  );
+  // 署名付きURLを1リクエストでまとめて生成
+  const photoList = photos ?? [];
+  const signedMap = new Map<string, string>();
+  if (photoList.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from("recipe-photos")
+      .createSignedUrls(
+        photoList.map((p) => p.storage_path),
+        3600
+      );
+    signed?.forEach((s) => {
+      if (s.path && s.signedUrl) signedMap.set(s.path, s.signedUrl);
+    });
+  }
+  const signedPhotos = photoList.map((p) => ({ ...p, url: signedMap.get(p.storage_path) ?? "" }));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const labelNames = ((recipe.recipe_labels ?? []) as any[])

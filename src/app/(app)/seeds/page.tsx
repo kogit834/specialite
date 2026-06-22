@@ -2,27 +2,19 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, Sprout } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthContext } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 
 export default async function SeedsPage() {
+  const { householdId } = getAuthContext();
+  if (!householdId) redirect("/setup");
+
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("household_id")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile?.household_id) redirect("/setup");
 
   const { data: seeds } = await supabase
     .from("seeds")
     .select("id, title, body, created_at, updated_at")
-    .eq("household_id", profile.household_id)
+    .eq("household_id", householdId)
     .order("updated_at", { ascending: false });
 
   return (
