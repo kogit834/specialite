@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Camera, X, Sparkles } from "lucide-react";
+import { Loader2, Camera, ImagePlus, X, Sparkles, Mic, MicOff, Wand2 } from "lucide-react";
 
 type LabelItem = { id: string; name: string };
 type LabelGroup = { id: string; name: string; labels: LabelItem[] };
@@ -36,7 +36,10 @@ export function RecipeForm({
   existingPhotos?: ExistingPhoto[];
 }) {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
   const [title, setTitle] = useState(recipe?.title ?? "");
   const [body, setBody] = useState(recipe?.body ?? "");
@@ -46,6 +49,17 @@ export function RecipeForm({
   const [loading, setLoading] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [error, setError] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [formatting, setFormatting] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const transcriptRef = useRef("");
+
+  useEffect(() => {
+    setSpeechSupported(
+      typeof window !== "undefined" &&
+        ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
+    );
+  }, []);
 
   const remainingExisting = existingPhotos.filter((p) => !removedPhotoIds.includes(p.id));
   const allLabels = labelGroups.flatMap((g) =>
@@ -71,6 +85,56 @@ export function RecipeForm({
     );
     setNewPhotos((prev) => [...prev, ...compressed]);
     e.target.value = "";
+  }
+
+  function toggleRecording() {
+    if (recording) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    transcriptRef.current = "";
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognition: any = new SR();
+    recognition.lang = "ja-JP";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcriptRef.current += event.results[i][0].transcript;
+      }
+    };
+
+    recognition.onend = async () => {
+      setRecording(false);
+      const raw = transcriptRef.current.trim();
+      if (!raw) return;
+      setFormatting(true);
+      try {
+        const res = await fetch("/api/voice-to-recipe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript: raw, title }),
+        });
+        const data = await res.json();
+        if (data.body) setBody(data.body);
+      } catch {
+        setBody((prev) => (prev ? prev + "\n" + raw : raw));
+      } finally {
+        setFormatting(false);
+      }
+    };
+
+    recognition.onerror = () => setRecording(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setRecording(true);
   }
 
   async function handleClassify() {
@@ -158,14 +222,51 @@ export function RecipeForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="body">レシピ本文</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="body">レシピ本文</Label>
+          {speechSupported && (
+            <button
+              type="button"
+              onClick={toggleRecording}
+              disabled={formatting}
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-colors ${
+                recording
+                  ? "bg-destructive/10 text-destructive animate-pulse"
+                  : formatting
+                  ? "text-muted-foreground cursor-not-allowed"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {recording ? (
+                <MicOff size={13} />
+              ) : formatting ? (
+                <Wand2 size={13} className="animate-spin" />
+              ) : (
+                <Mic size={13} />
+              )}
+              {recording ? "停止" : formatting ? "AI整形中..." : "音声入力"}
+            </button>
+          )}
+        </div>
         <Textarea
           id="body"
-          placeholder="材料・手順を入力..."
+          placeholder={recording ? "話してください…" : "材料・手順を入力..."}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={8}
         />
+        {recording && (
+          <p className="text-xs text-destructive flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-destructive animate-pulse" />
+            録音中… 停止ボタンで終了するとAIが整形します
+          </p>
+        )}
+        {formatting && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Wand2 size={12} className="animate-spin" />
+            音声をレシピに整形しています…
+          </p>
+        )}
       </div>
 
       {hasLabels && (
@@ -258,19 +359,35 @@ export function RecipeForm({
           ))}
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => cameraInputRef.current?.click()}
             className="aspect-square border-2 border-dashed border-muted-foreground/30 rounded-md flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary/50 transition-colors"
           >
-            <Camera size={24} />
-            <span className="text-xs">追加</span>
+            <Camera size={22} />
+            <span className="text-xs">カメラ</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => galleryInputRef.current?.click()}
+            className="aspect-square border-2 border-dashed border-muted-foreground/30 rounded-md flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary/50 transition-colors"
+          >
+            <ImagePlus size={22} />
+            <span className="text-xs">ライブラリ</span>
           </button>
         </div>
         <input
-          ref={fileInputRef}
+          ref={cameraInputRef}
           type="file"
           accept="image/*"
           multiple
           capture="environment"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          multiple
           className="hidden"
           onChange={handleFileChange}
         />

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, FileUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { RecipeList } from "./recipe-list";
@@ -58,15 +58,34 @@ export default async function RecipesPage({
 
   const { data: recipes } = await query;
 
+  // サムネイル用署名付きURLを生成
+  const recipesWithThumbnails = await Promise.all(
+    (recipes ?? []).map(async (recipe) => {
+      const firstPhoto = recipe.recipe_photos?.[0];
+      if (!firstPhoto) return { ...recipe, thumbnail_url: null };
+      const { data } = await supabase.storage
+        .from("recipe-photos")
+        .createSignedUrl(firstPhoto.storage_path, 3600);
+      return { ...recipe, thumbnail_url: data?.signedUrl ?? null };
+    })
+  );
+
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">得意料理</h1>
-        <Button size="icon" asChild>
-          <Link href="/recipes/new">
-            <Plus size={20} />
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="icon" variant="outline" asChild>
+            <Link href="/recipes/import" aria-label="一括取り込み">
+              <FileUp size={20} />
+            </Link>
+          </Button>
+          <Button size="icon" asChild>
+            <Link href="/recipes/new" aria-label="レシピを追加">
+              <Plus size={20} />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <RecipeSearch
@@ -76,9 +95,8 @@ export default async function RecipesPage({
       />
 
       <RecipeList
-        recipes={recipes ?? []}
+        recipes={recipesWithThumbnails}
         householdId={profile.household_id}
-        supabaseUrl={process.env.NEXT_PUBLIC_SUPABASE_URL!}
       />
     </div>
   );
