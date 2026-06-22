@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Settings } from "lucide-react";
+import { BookOpen, Settings, Sprout } from "lucide-react";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,6 +12,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         >
           <BookOpen size={22} />
           <span>レシピ</span>
+        </Link>
+        <Link
+          href="/seeds"
+          className="flex flex-col items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-2 px-4"
+        >
+          <Sprout size={22} />
+          <span>タネ</span>
         </Link>
         <Link
           href="/settings"

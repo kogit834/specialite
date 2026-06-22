@@ -35,6 +35,11 @@ export type Recipe = {
   updated_at: string;
 };
 
+export type RecipeLabel = {
+  recipe_id: string;
+  label_id: string;
+};
+
 export type RecipePhoto = {
   id: string;
   recipe_id: string;
@@ -42,4 +47,14 @@ export type RecipePhoto = {
   caption: string | null;
   taken_on: string | null;
   created_at: string;
+};
+
+export type Seed = {
+  id: string;
+  household_id: string;
+  title: string;
+  body: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 };

@@ -13,26 +13,23 @@ import { Loader2, Camera, ImagePlus, X, Sparkles, Mic, MicOff, Wand2 } from "luc
 
 type LabelItem = { id: string; name: string };
 type LabelGroup = { id: string; name: string; labels: LabelItem[] };
-type Recipe = { id: string; title: string; body: string; label_id: string | null };
+type Recipe = { id: string; title: string; body: string };
 type ExistingPhoto = { id: string; storage_path: string; url: string; caption: string | null; taken_on: string | null };
-
-type NewPhoto = {
-  file: File;
-  preview: string;
-  caption: string;
-};
+type NewPhoto = { file: File; preview: string; caption: string };
 
 export function RecipeForm({
   householdId,
   userId,
   labelGroups,
   recipe,
+  initialLabelIds = [],
   existingPhotos = [],
 }: {
   householdId: string;
   userId: string;
   labelGroups: LabelGroup[];
   recipe?: Recipe;
+  initialLabelIds?: string[];
   existingPhotos?: ExistingPhoto[];
 }) {
   const router = useRouter();
@@ -43,7 +40,7 @@ export function RecipeForm({
 
   const [title, setTitle] = useState(recipe?.title ?? "");
   const [body, setBody] = useState(recipe?.body ?? "");
-  const [labelId, setLabelId] = useState<string>(recipe?.label_id ?? "");
+  const [labelIds, setLabelIds] = useState<string[]>(initialLabelIds);
   const [newPhotos, setNewPhotos] = useState<NewPhoto[]>([]);
   const [removedPhotoIds, setRemovedPhotoIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -67,6 +64,12 @@ export function RecipeForm({
   );
   const hasLabels = allLabels.length > 0;
 
+  function toggleLabel(id: string) {
+    setLabelIds((prev) =>
+      prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id]
+    );
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     const compressed = await Promise.all(
@@ -76,11 +79,7 @@ export function RecipeForm({
           maxWidthOrHeight: 1280,
           useWebWorker: true,
         });
-        return {
-          file: comp,
-          preview: URL.createObjectURL(comp),
-          caption: "",
-        };
+        return { file: comp, preview: URL.createObjectURL(comp), caption: "" };
       })
     );
     setNewPhotos((prev) => [...prev, ...compressed]);
@@ -147,7 +146,9 @@ export function RecipeForm({
         body: JSON.stringify({ title, body, labels: allLabels }),
       });
       const data = await res.json();
-      if (data.labelId) setLabelId(data.labelId);
+      if (data.labelId && !labelIds.includes(data.labelId)) {
+        setLabelIds((prev) => [...prev, data.labelId]);
+      }
     } catch {
       // 判定失敗は無視
     } finally {
@@ -161,7 +162,6 @@ export function RecipeForm({
     setLoading(true);
     setError("");
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createClient();
 
     try {
@@ -170,8 +170,16 @@ export function RecipeForm({
       if (recipe) {
         await supabase
           .from("recipes")
-          .update({ title, body, label_id: labelId || null })
+          .update({ title, body })
           .eq("id", recipe.id);
+
+        // ラベル更新（全削除→再挿入）
+        await supabase.from("recipe_labels").delete().eq("recipe_id", recipe.id);
+        if (labelIds.length > 0) {
+          await supabase.from("recipe_labels").insert(
+            labelIds.map((lid) => ({ recipe_id: recipe.id, label_id: lid }))
+          );
+        }
 
         if (removedPhotoIds.length > 0) {
           const toDelete = existingPhotos.filter((p) => removedPhotoIds.includes(p.id));
@@ -183,11 +191,17 @@ export function RecipeForm({
       } else {
         const { data, error: rErr } = await supabase
           .from("recipes")
-          .insert({ household_id: householdId, title, body, label_id: labelId || null, created_by: userId })
+          .insert({ household_id: householdId, title, body, created_by: userId })
           .select("id")
           .single();
         if (rErr || !data) throw new Error("レシピ保存失敗");
         recipeId = data.id;
+
+        if (labelIds.length > 0) {
+          await supabase.from("recipe_labels").insert(
+            labelIds.map((lid) => ({ recipe_id: recipeId, label_id: lid }))
+          );
+        }
       }
 
       for (const p of newPhotos) {
@@ -202,7 +216,6 @@ export function RecipeForm({
       }
 
       router.push(`/recipes/${recipeId}`);
-      router.refresh();
     } catch (err) {
       setError((err as Error).message ?? "保存に失敗しました");
       setLoading(false);
@@ -273,7 +286,7 @@ export function RecipeForm({
       {hasLabels && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>ラベル</Label>
+            <Label>ラベル（複数選択可）</Label>
             <Button
               type="button"
               variant="ghost"
@@ -291,19 +304,6 @@ export function RecipeForm({
             </Button>
           </div>
           <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setLabelId("")}
-                className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                  !labelId
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-input hover:bg-muted"
-                }`}
-              >
-                未分類
-              </button>
-            </div>
             {labelGroups.map((group) =>
               group.labels.length > 0 ? (
                 <div key={group.id} className="space-y-1">
@@ -313,9 +313,9 @@ export function RecipeForm({
                       <button
                         type="button"
                         key={label.id}
-                        onClick={() => setLabelId(label.id)}
+                        onClick={() => toggleLabel(label.id)}
                         className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                          labelId === label.id
+                          labelIds.includes(label.id)
                             ? "bg-primary text-primary-foreground border-primary"
                             : "border-input hover:bg-muted"
                         }`}
@@ -375,7 +375,6 @@ export function RecipeForm({
             <span className="text-xs">ライブラリ</span>
           </button>
         </div>
-        {/* カメラ専用 */}
         <input
           ref={cameraInputRef}
           type="file"

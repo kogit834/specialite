@@ -25,11 +25,38 @@ export default async function RecipesPage({
 
   if (!profile?.household_id) redirect("/setup");
 
-  const { data: labelGroupsRaw } = await supabase
-    .from("label_groups")
-    .select("id, name, sort_order, labels(id, name, sort_order)")
-    .eq("household_id", profile.household_id)
-    .order("sort_order");
+  const [{ data: labelGroupsRaw }, recipesResult] = await Promise.all([
+    supabase
+      .from("label_groups")
+      .select("id, name, sort_order, labels(id, name, sort_order)")
+      .eq("household_id", profile.household_id)
+      .order("sort_order"),
+    (async () => {
+      let query = supabase
+        .from("recipes")
+        .select(
+          `id, title, created_at,
+           recipe_labels(label_id, labels(name, label_groups(name))),
+           recipe_photos(storage_path)`
+        )
+        .eq("household_id", profile.household_id)
+        .order("created_at", { ascending: false });
+
+      if (searchParams.label) {
+        const { data: rl } = await supabase
+          .from("recipe_labels")
+          .select("recipe_id")
+          .eq("label_id", searchParams.label);
+        const ids = rl?.map((r) => r.recipe_id) ?? [];
+        if (ids.length === 0) return { data: [] };
+        query = query.in("id", ids);
+      }
+      if (searchParams.q) {
+        query = query.ilike("title", `%${searchParams.q}%`);
+      }
+      return query;
+    })(),
+  ]);
 
   const labelGroups = (labelGroupsRaw ?? []).map((g) => ({
     id: g.id,
@@ -39,29 +66,11 @@ export default async function RecipesPage({
     ),
   }));
 
-  let query = supabase
-    .from("recipes")
-    .select(
-      `id, title, label_id, created_at,
-       labels(name),
-       recipe_photos(storage_path)`
-    )
-    .eq("household_id", profile.household_id)
-    .order("created_at", { ascending: false });
-
-  if (searchParams.label) {
-    query = query.eq("label_id", searchParams.label);
-  }
-  if (searchParams.q) {
-    query = query.ilike("title", `%${searchParams.q}%`);
-  }
-
-  const { data: recipes } = await query;
-
   // サムネイル用署名付きURLを生成
   const recipesWithThumbnails = await Promise.all(
-    (recipes ?? []).map(async (recipe) => {
-      const firstPhoto = recipe.recipe_photos?.[0];
+    (recipesResult.data ?? []).map(async (recipe) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const firstPhoto = (recipe.recipe_photos as any[])?.[0];
       if (!firstPhoto) return { ...recipe, thumbnail_url: null };
       const { data } = await supabase.storage
         .from("recipe-photos")

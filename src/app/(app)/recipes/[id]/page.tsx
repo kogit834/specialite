@@ -13,19 +13,20 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: recipe } = await supabase
-    .from("recipes")
-    .select(`id, title, body, label_id, created_at, updated_at, labels(name)`)
-    .eq("id", params.id)
-    .single();
+  const [{ data: recipe }, { data: photos }] = await Promise.all([
+    supabase
+      .from("recipes")
+      .select(`id, title, body, created_at, updated_at, recipe_labels(label_id, labels(name))`)
+      .eq("id", params.id)
+      .single(),
+    supabase
+      .from("recipe_photos")
+      .select("id, storage_path, caption, taken_on")
+      .eq("recipe_id", params.id)
+      .order("created_at"),
+  ]);
 
   if (!recipe) notFound();
-
-  const { data: photos } = await supabase
-    .from("recipe_photos")
-    .select("id, storage_path, caption, taken_on")
-    .eq("recipe_id", params.id)
-    .order("created_at");
 
   const signedPhotos = await Promise.all(
     (photos ?? []).map(async (p) => {
@@ -36,7 +37,10 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
     })
   );
 
-  const labelName = (recipe.labels as unknown as { name: string } | null)?.name;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const labelNames = ((recipe.recipe_labels ?? []) as any[])
+    .map((rl) => rl.labels?.name)
+    .filter(Boolean) as string[];
 
   return (
     <div className="pb-4">
@@ -58,10 +62,17 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
       <div className="p-4 space-y-4">
         <div>
           <h1 className="text-2xl font-bold">{recipe.title}</h1>
-          {labelName && (
-            <span className="inline-block mt-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-              {labelName}
-            </span>
+          {labelNames.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {labelNames.map((name) => (
+                <span
+                  key={name}
+                  className="inline-block text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
           )}
         </div>
 

@@ -8,19 +8,25 @@ import { ChefHat, LayoutGrid, List } from "lucide-react";
 type Recipe = {
   id: string;
   title: string;
-  label_id: string | null;
   created_at: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  labels: any;
   thumbnail_url: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  recipe_labels: any[];
 };
 
-function getLabelName(labels: unknown): string {
-  if (!labels) return "";
-  if (typeof labels === "object" && labels !== null && "name" in labels) {
-    return String((labels as { name: string }).name);
-  }
-  return "";
+function getLabelNames(recipeLabels: unknown[]): string[] {
+  if (!Array.isArray(recipeLabels)) return [];
+  return recipeLabels
+    .map((rl: unknown) => {
+      if (rl && typeof rl === "object" && "labels" in rl) {
+        const labels = (rl as { labels: unknown }).labels;
+        if (labels && typeof labels === "object" && "name" in labels) {
+          return String((labels as { name: string }).name);
+        }
+      }
+      return null;
+    })
+    .filter(Boolean) as string[];
 }
 
 export function RecipeList({
@@ -73,40 +79,45 @@ export function RecipeList({
 
       {view === "grid" ? (
         <div className="grid grid-cols-2 gap-3">
-          {recipes.map((recipe) => (
-            <Link
-              key={recipe.id}
-              href={`/recipes/${recipe.id}`}
-              className="rounded-lg border bg-card overflow-hidden active:scale-95 transition-transform"
-            >
-              <div className="aspect-square bg-muted relative">
-                {recipe.thumbnail_url ? (
-                  <Image
-                    src={recipe.thumbnail_url}
-                    alt={recipe.title}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 50vw, 200px"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ChefHat size={32} className="text-muted-foreground/30" />
-                  </div>
-                )}
-              </div>
-              <div className="p-2">
-                <p className="font-medium text-sm leading-tight line-clamp-2">{recipe.title}</p>
-                {getLabelName(recipe.labels) && (
-                  <p className="text-xs text-muted-foreground mt-1">{getLabelName(recipe.labels)}</p>
-                )}
-              </div>
-            </Link>
-          ))}
+          {recipes.map((recipe) => {
+            const labelNames = getLabelNames(recipe.recipe_labels);
+            return (
+              <Link
+                key={recipe.id}
+                href={`/recipes/${recipe.id}`}
+                className="rounded-lg border bg-card overflow-hidden active:scale-95 transition-transform"
+              >
+                <div className="aspect-square bg-muted relative">
+                  {recipe.thumbnail_url ? (
+                    <Image
+                      src={recipe.thumbnail_url}
+                      alt={recipe.title}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 50vw, 200px"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ChefHat size={32} className="text-muted-foreground/30" />
+                    </div>
+                  )}
+                </div>
+                <div className="p-2">
+                  <p className="font-medium text-sm leading-tight line-clamp-2">{recipe.title}</p>
+                  {labelNames.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                      {labelNames.join(" · ")}
+                    </p>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       ) : (
         <div className="divide-y border rounded-lg overflow-hidden">
           {recipes.map((recipe) => {
-            const labelName = getLabelName(recipe.labels);
+            const labelNames = getLabelNames(recipe.recipe_labels);
             return (
               <Link
                 key={recipe.id}
@@ -130,10 +141,17 @@ export function RecipeList({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm leading-tight line-clamp-2">{recipe.title}</p>
-                  {labelName && (
-                    <span className="inline-block mt-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                      {labelName}
-                    </span>
+                  {labelNames.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {labelNames.map((name) => (
+                        <span
+                          key={name}
+                          className="inline-block text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full"
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
               </Link>

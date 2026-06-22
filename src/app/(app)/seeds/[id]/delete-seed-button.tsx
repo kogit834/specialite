@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { Trash2, Loader2 } from "lucide-react";
 
-export function DeleteRecipeButton({ recipeId }: { recipeId: string }) {
+export function DeleteSeedButton({ seedId }: { seedId: string }) {
   const router = useRouter();
   const [confirm, setConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -14,8 +14,8 @@ export function DeleteRecipeButton({ recipeId }: { recipeId: string }) {
   async function handleDelete() {
     setLoading(true);
     const supabase = createClient();
-    await supabase.from("recipes").delete().eq("id", recipeId);
-    router.push("/recipes");
+    await supabase.from("seeds").delete().eq("id", seedId);
+    router.push("/seeds");
   }
 
   if (confirm) {
@@ -34,7 +34,7 @@ export function DeleteRecipeButton({ recipeId }: { recipeId: string }) {
   return (
     <Button variant="ghost" className="w-full text-destructive" onClick={() => setConfirm(true)}>
       <Trash2 size={16} className="mr-2" />
-      このレシピを削除
+      このタネを削除
     </Button>
   );
 }

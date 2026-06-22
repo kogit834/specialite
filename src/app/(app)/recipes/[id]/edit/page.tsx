@@ -20,19 +20,23 @@ export default async function EditRecipePage({ params }: { params: { id: string 
 
   if (!profile?.household_id) redirect("/setup");
 
-  const { data: recipe } = await supabase
-    .from("recipes")
-    .select("id, title, body, label_id")
-    .eq("id", params.id)
-    .single();
+  const [{ data: recipe }, { data: labelGroupsRaw }, { data: recipeLabels }, { data: photos }] =
+    await Promise.all([
+      supabase.from("recipes").select("id, title, body").eq("id", params.id).single(),
+      supabase
+        .from("label_groups")
+        .select("id, name, sort_order, labels(id, name, sort_order)")
+        .eq("household_id", profile.household_id)
+        .order("sort_order"),
+      supabase.from("recipe_labels").select("label_id").eq("recipe_id", params.id),
+      supabase
+        .from("recipe_photos")
+        .select("id, storage_path, caption, taken_on")
+        .eq("recipe_id", params.id)
+        .order("created_at"),
+    ]);
 
   if (!recipe) notFound();
-
-  const { data: labelGroupsRaw } = await supabase
-    .from("label_groups")
-    .select("id, name, sort_order, labels(id, name, sort_order)")
-    .eq("household_id", profile.household_id)
-    .order("sort_order");
 
   const labelGroups = (labelGroupsRaw ?? []).map((g) => ({
     id: g.id,
@@ -42,12 +46,6 @@ export default async function EditRecipePage({ params }: { params: { id: string 
     ),
   }));
 
-  const { data: photos } = await supabase
-    .from("recipe_photos")
-    .select("id, storage_path, caption, taken_on")
-    .eq("recipe_id", params.id)
-    .order("created_at");
-
   const signedPhotos = await Promise.all(
     (photos ?? []).map(async (p) => {
       const { data } = await supabase.storage
@@ -56,6 +54,8 @@ export default async function EditRecipePage({ params }: { params: { id: string 
       return { ...p, url: data?.signedUrl ?? "" };
     })
   );
+
+  const initialLabelIds = (recipeLabels ?? []).map((rl) => rl.label_id);
 
   return (
     <div className="p-4">
@@ -72,6 +72,7 @@ export default async function EditRecipePage({ params }: { params: { id: string 
         userId={user.id}
         labelGroups={labelGroups}
         recipe={recipe}
+        initialLabelIds={initialLabelIds}
         existingPhotos={signedPhotos}
       />
     </div>
