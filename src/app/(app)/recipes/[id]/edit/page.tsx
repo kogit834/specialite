@@ -22,17 +22,25 @@ export default async function EditRecipePage({ params }: { params: { id: string 
 
   const { data: recipe } = await supabase
     .from("recipes")
-    .select("id, title, body, genre_id")
+    .select("id, title, body, label_id")
     .eq("id", params.id)
     .single();
 
   if (!recipe) notFound();
 
-  const { data: genres } = await supabase
-    .from("genres")
-    .select("id, name")
+  const { data: labelGroupsRaw } = await supabase
+    .from("label_groups")
+    .select("id, name, sort_order, labels(id, name, sort_order)")
     .eq("household_id", profile.household_id)
     .order("sort_order");
+
+  const labelGroups = (labelGroupsRaw ?? []).map((g) => ({
+    id: g.id,
+    name: g.name,
+    labels: (Array.isArray(g.labels) ? g.labels : []).sort(
+      (a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order
+    ),
+  }));
 
   const { data: photos } = await supabase
     .from("recipe_photos")
@@ -62,7 +70,7 @@ export default async function EditRecipePage({ params }: { params: { id: string 
       <RecipeForm
         householdId={profile.household_id}
         userId={user.id}
-        genres={genres ?? []}
+        labelGroups={labelGroups}
         recipe={recipe}
         existingPhotos={signedPhotos}
       />

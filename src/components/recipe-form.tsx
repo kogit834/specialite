@@ -11,8 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Camera, ImagePlus, X, Sparkles, Mic, MicOff, Wand2 } from "lucide-react";
 
-type Genre = { id: string; name: string };
-type Recipe = { id: string; title: string; body: string; genre_id: string | null };
+type LabelItem = { id: string; name: string };
+type LabelGroup = { id: string; name: string; labels: LabelItem[] };
+type Recipe = { id: string; title: string; body: string; label_id: string | null };
 type ExistingPhoto = { id: string; storage_path: string; url: string; caption: string | null; taken_on: string | null };
 
 type NewPhoto = {
@@ -24,13 +25,13 @@ type NewPhoto = {
 export function RecipeForm({
   householdId,
   userId,
-  genres,
+  labelGroups,
   recipe,
   existingPhotos = [],
 }: {
   householdId: string;
   userId: string;
-  genres: Genre[];
+  labelGroups: LabelGroup[];
   recipe?: Recipe;
   existingPhotos?: ExistingPhoto[];
 }) {
@@ -42,7 +43,7 @@ export function RecipeForm({
 
   const [title, setTitle] = useState(recipe?.title ?? "");
   const [body, setBody] = useState(recipe?.body ?? "");
-  const [genreId, setGenreId] = useState<string>(recipe?.genre_id ?? "");
+  const [labelId, setLabelId] = useState<string>(recipe?.label_id ?? "");
   const [newPhotos, setNewPhotos] = useState<NewPhoto[]>([]);
   const [removedPhotoIds, setRemovedPhotoIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,6 +62,10 @@ export function RecipeForm({
   }, []);
 
   const remainingExisting = existingPhotos.filter((p) => !removedPhotoIds.includes(p.id));
+  const allLabels = labelGroups.flatMap((g) =>
+    g.labels.map((l) => ({ id: l.id, name: `${g.name}: ${l.name}` }))
+  );
+  const hasLabels = allLabels.length > 0;
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -119,7 +124,6 @@ export function RecipeForm({
         const data = await res.json();
         if (data.body) setBody(data.body);
       } catch {
-        // 整形失敗時はそのまま書き起こしを使う
         setBody((prev) => (prev ? prev + "\n" + raw : raw));
       } finally {
         setFormatting(false);
@@ -140,10 +144,10 @@ export function RecipeForm({
       const res = await fetch("/api/classify-genre", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, body, genres }),
+        body: JSON.stringify({ title, body, labels: allLabels }),
       });
       const data = await res.json();
-      if (data.genreId) setGenreId(data.genreId);
+      if (data.labelId) setLabelId(data.labelId);
     } catch {
       // 判定失敗は無視
     } finally {
@@ -166,7 +170,7 @@ export function RecipeForm({
       if (recipe) {
         await supabase
           .from("recipes")
-          .update({ title, body, genre_id: genreId || null })
+          .update({ title, body, label_id: labelId || null })
           .eq("id", recipe.id);
 
         if (removedPhotoIds.length > 0) {
@@ -179,7 +183,7 @@ export function RecipeForm({
       } else {
         const { data, error: rErr } = await supabase
           .from("recipes")
-          .insert({ household_id: householdId, title, body, genre_id: genreId || null, created_by: userId })
+          .insert({ household_id: householdId, title, body, label_id: labelId || null, created_by: userId })
           .select("id")
           .single();
         if (rErr || !data) throw new Error("レシピ保存失敗");
@@ -266,10 +270,10 @@ export function RecipeForm({
         )}
       </div>
 
-      {genres.length > 0 && (
-        <div className="space-y-1.5">
+      {hasLabels && (
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>ジャンル</Label>
+            <Label>ラベル</Label>
             <Button
               type="button"
               variant="ghost"
@@ -286,32 +290,43 @@ export function RecipeForm({
               AIで判定
             </Button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setGenreId("")}
-              className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                !genreId
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "border-input hover:bg-muted"
-              }`}
-            >
-              未分類
-            </button>
-            {genres.map((g) => (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                key={g.id}
-                onClick={() => setGenreId(g.id)}
+                onClick={() => setLabelId("")}
                 className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                  genreId === g.id
+                  !labelId
                     ? "bg-primary text-primary-foreground border-primary"
                     : "border-input hover:bg-muted"
                 }`}
               >
-                {g.name}
+                未分類
               </button>
-            ))}
+            </div>
+            {labelGroups.map((group) =>
+              group.labels.length > 0 ? (
+                <div key={group.id} className="space-y-1">
+                  <p className="text-xs text-muted-foreground">{group.name}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {group.labels.map((label) => (
+                      <button
+                        type="button"
+                        key={label.id}
+                        onClick={() => setLabelId(label.id)}
+                        className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                          labelId === label.id
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-input hover:bg-muted"
+                        }`}
+                      >
+                        {label.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null
+            )}
           </div>
         </div>
       )}
@@ -370,7 +385,6 @@ export function RecipeForm({
           className="hidden"
           onChange={handleFileChange}
         />
-        {/* ローカルファイル選択 */}
         <input
           ref={galleryInputRef}
           type="file"

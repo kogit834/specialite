@@ -15,7 +15,7 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
 
   const { data: recipe } = await supabase
     .from("recipes")
-    .select(`id, title, body, genre_id, created_at, updated_at, genres(name)`)
+    .select(`id, title, body, label_id, created_at, updated_at, labels(name)`)
     .eq("id", params.id)
     .single();
 
@@ -27,7 +27,6 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
     .eq("recipe_id", params.id)
     .order("created_at");
 
-  // 署名付きURLを取得
   const signedPhotos = await Promise.all(
     (photos ?? []).map(async (p) => {
       const { data } = await supabase.storage
@@ -36,6 +35,8 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
       return { ...p, url: data?.signedUrl ?? "" };
     })
   );
+
+  const labelName = (recipe.labels as unknown as { name: string } | null)?.name;
 
   return (
     <div className="pb-4">
@@ -57,9 +58,9 @@ export default async function RecipeDetailPage({ params }: { params: { id: strin
       <div className="p-4 space-y-4">
         <div>
           <h1 className="text-2xl font-bold">{recipe.title}</h1>
-          {(recipe.genres as unknown as { name: string } | null)?.name && (
+          {labelName && (
             <span className="inline-block mt-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-              {(recipe.genres as unknown as { name: string }).name}
+              {labelName}
             </span>
           )}
         </div>

@@ -1,10 +1,8 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { Settings } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { LogoutButton } from "./logout-button";
-import { HouseholdIdCopy } from "./household-id-copy";
+import { SettingsTabs } from "./settings-tabs";
 
 export default async function SettingsPage() {
   const supabase = createClient();
@@ -17,6 +15,25 @@ export default async function SettingsPage() {
     .eq("id", user.id)
     .single();
 
+  if (!profile?.household_id) redirect("/setup");
+
+  const { data: labelGroupsRaw } = await supabase
+    .from("label_groups")
+    .select("id, name, sort_order, labels(id, name, sort_order)")
+    .eq("household_id", profile.household_id)
+    .order("sort_order");
+
+  const labelGroups = (labelGroupsRaw ?? []).map((g) => ({
+    id: g.id,
+    name: g.name,
+    sort_order: g.sort_order,
+    labels: (Array.isArray(g.labels) ? g.labels : []).sort(
+      (a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order
+    ),
+  }));
+
+  const householdName = (profile?.households as unknown as { name: string } | null)?.name ?? "";
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-2 mb-2">
@@ -24,43 +41,15 @@ export default async function SettingsPage() {
         <h1 className="text-xl font-bold">設定</h1>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">アカウント</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">表示名</span>
-            <span>{profile?.display_name ?? "—"}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">メール</span>
-            <span className="text-xs">{user.email}</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">世帯</CardTitle>
-          <CardDescription>
-            このIDを妻に共有して「世帯に参加する」で入力してもらうと、レシピを共有できます
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">世帯名</span>
-            <span>{(profile?.households as unknown as { name: string } | null)?.name ?? "—"}</span>
-          </div>
-          <Separator />
-          <div className="space-y-1">
-            <span className="text-muted-foreground">世帯ID（共有用）</span>
-            <HouseholdIdCopy householdId={profile?.household_id ?? ""} />
-          </div>
-        </CardContent>
-      </Card>
-
-      <LogoutButton />
+      <Suspense>
+        <SettingsTabs
+          displayName={profile.display_name}
+          email={user.email ?? ""}
+          householdName={householdName}
+          householdId={profile.household_id}
+          labelGroups={labelGroups}
+        />
+      </Suspense>
     </div>
   );
 }

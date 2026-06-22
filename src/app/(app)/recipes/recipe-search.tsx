@@ -6,15 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
 
-type Genre = { id: string; name: string };
+type LabelItem = { id: string; name: string };
+type LabelGroup = { id: string; name: string; labels: LabelItem[] };
 
 export function RecipeSearch({
-  genres,
-  currentGenre,
+  labelGroups,
+  currentLabel,
   currentQ,
 }: {
-  genres: Genre[];
-  currentGenre?: string;
+  labelGroups: LabelGroup[];
+  currentLabel?: string;
   currentQ?: string;
 }) {
   const router = useRouter();
@@ -33,6 +34,8 @@ export function RecipeSearch({
     [router, searchParams]
   );
 
+  const hasLabels = labelGroups.some((g) => g.labels.length > 0);
+
   return (
     <div className="space-y-3 mb-4">
       <div className="relative">
@@ -44,32 +47,40 @@ export function RecipeSearch({
           onChange={(e) => {
             const val = e.target.value;
             clearTimeout((window as Window & { _searchTimer?: ReturnType<typeof setTimeout> })._searchTimer);
-            (window as Window & { _searchTimer?: ReturnType<typeof setTimeout> })._searchTimer = setTimeout(() => updateParam("q", val || undefined), 400);
+            (window as Window & { _searchTimer?: ReturnType<typeof setTimeout> })._searchTimer = setTimeout(
+              () => updateParam("q", val || undefined),
+              400
+            );
           }}
         />
       </div>
 
-      {genres.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          <Button
-            variant={!currentGenre ? "default" : "outline"}
-            size="sm"
-            className="shrink-0 h-8"
-            onClick={() => updateParam("genre", undefined)}
-          >
-            すべて
-          </Button>
-          {genres.map((g) => (
+      {hasLabels && (
+        <div className="space-y-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <Button
-              key={g.id}
-              variant={currentGenre === g.id ? "default" : "outline"}
+              variant={!currentLabel ? "default" : "outline"}
               size="sm"
               className="shrink-0 h-8"
-              onClick={() => updateParam("genre", g.id)}
+              onClick={() => updateParam("label", undefined)}
             >
-              {g.name}
+              すべて
             </Button>
-          ))}
+            {labelGroups.map((group) =>
+              group.labels.map((label) => (
+                <Button
+                  key={label.id}
+                  variant={currentLabel === label.id ? "default" : "outline"}
+                  size="sm"
+                  className="shrink-0 h-8"
+                  onClick={() => updateParam("label", label.id)}
+                >
+                  <span className="text-muted-foreground mr-1 text-xs">{group.name}/</span>
+                  {label.name}
+                </Button>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>
