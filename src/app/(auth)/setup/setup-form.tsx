@@ -23,28 +23,28 @@ export function SetupForm({ userEmail }: { userEmail: string }) {
     setLoading(true);
     setError("");
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data: household, error: hErr } = await supabase
+    const householdId = crypto.randomUUID();
+    const { error: hErr } = await supabase
       .from("households")
-      .insert({ name: householdName })
-      .select()
-      .single();
+      .insert({ id: householdId, name: householdName });
 
-    if (hErr || !household) {
-      setError("世帯の作成に失敗しました");
+    if (hErr) {
+      setError("世帯の作成に失敗しました: " + hErr.message);
       setLoading(false);
       return;
     }
 
     const { error: pErr } = await supabase
       .from("profiles")
-      .upsert({ id: user.id, display_name: displayName, household_id: household.id });
+      .upsert({ id: user.id, display_name: displayName, household_id: householdId });
 
     if (pErr) {
-      setError("プロフィールの作成に失敗しました");
+      setError("プロフィールの作成に失敗しました: " + (pErr?.message ?? "不明"));
       setLoading(false);
       return;
     }
@@ -58,6 +58,7 @@ export function SetupForm({ userEmail }: { userEmail: string }) {
     setLoading(true);
     setError("");
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;

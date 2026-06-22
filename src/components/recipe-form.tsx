@@ -161,6 +161,7 @@ export function RecipeForm({
     setLoading(true);
     setError("");
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createClient();
 
     try {
@@ -374,6 +375,7 @@ export function RecipeForm({
             <span className="text-xs">ライブラリ</span>
           </button>
         </div>
+        {/* カメラ専用 */}
         <input
           ref={cameraInputRef}
           type="file"
@@ -401,8 +403,10 @@ export function RecipeForm({
             <Loader2 size={16} className="mr-2 animate-spin" />
             保存中...
           </>
+        ) : recipe ? (
+          "変更を保存"
         ) : (
-          recipe ? "変更を保存" : "レシピを保存"
+          "レシピを保存"
         )}
       </Button>
     </form>

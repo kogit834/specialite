@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
 import { Loader2, Mail } from "lucide-react";
 
 export function LoginForm() {
@@ -18,19 +17,35 @@ export function LoginForm() {
     setLoading(true);
     setError("");
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${location.origin}/auth/callback`,
-      },
-    });
+    try {
+      // サーバー側APIルート経由でOTPを送信（ブラウザfetchのヘッダー制限を回避）
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          redirectTo: `${location.origin}/auth/callback`,
+        }),
+      });
 
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-    } else {
+      let data: { ok?: boolean; error?: string } = {};
+      try {
+        const text = await res.text();
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        // レスポンスが空またはJSON以外の場合
+      }
+
+      if (!res.ok) {
+        setError(data.error || `エラー (HTTP ${res.status})`);
+        return;
+      }
+
       setSent(true);
+    } catch (err) {
+      setError((err as Error).message || "ネットワークエラーが発生しました");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -66,9 +81,7 @@ export function LoginForm() {
           inputMode="email"
         />
       </div>
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? (
           <>
