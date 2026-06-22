@@ -25,7 +25,6 @@ function getLabelName(labels: unknown): string {
 
 export function RecipeList({
   recipes,
-  supabaseUrl,
 }: {
   recipes: Recipe[];
   householdId: string;
