@@ -9,7 +9,7 @@ import { RecipeSearch } from "./recipe-search";
 export default async function RecipesPage({
   searchParams,
 }: {
-  searchParams: { genre?: string; q?: string };
+  searchParams: { label?: string; q?: string };
 }) {
   const supabase = createClient();
   const {
@@ -25,26 +25,32 @@ export default async function RecipesPage({
 
   if (!profile?.household_id) redirect("/setup");
 
-  // ジャンル一覧
-  const { data: genres } = await supabase
-    .from("genres")
-    .select("id, name")
+  const { data: labelGroupsRaw } = await supabase
+    .from("label_groups")
+    .select("id, name, sort_order, labels(id, name, sort_order)")
     .eq("household_id", profile.household_id)
     .order("sort_order");
 
-  // レシピ一覧（フィルタ付き）
+  const labelGroups = (labelGroupsRaw ?? []).map((g) => ({
+    id: g.id,
+    name: g.name,
+    labels: (Array.isArray(g.labels) ? g.labels : []).sort(
+      (a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order
+    ),
+  }));
+
   let query = supabase
     .from("recipes")
     .select(
-      `id, title, genre_id, created_at,
-       genres(name),
+      `id, title, label_id, created_at,
+       labels(name),
        recipe_photos(storage_path)`
     )
     .eq("household_id", profile.household_id)
     .order("created_at", { ascending: false });
 
-  if (searchParams.genre) {
-    query = query.eq("genre_id", searchParams.genre);
+  if (searchParams.label) {
+    query = query.eq("label_id", searchParams.label);
   }
   if (searchParams.q) {
     query = query.ilike("title", `%${searchParams.q}%`);
@@ -63,7 +69,11 @@ export default async function RecipesPage({
         </Button>
       </div>
 
-      <RecipeSearch genres={genres ?? []} currentGenre={searchParams.genre} currentQ={searchParams.q} />
+      <RecipeSearch
+        labelGroups={labelGroups}
+        currentLabel={searchParams.label}
+        currentQ={searchParams.q}
+      />
 
       <RecipeList
         recipes={recipes ?? []}
