@@ -52,6 +52,18 @@ export default async function RecipesPage({
 
   const { data: recipes } = await query;
 
+  // サムネイル用署名付きURLを生成
+  const recipesWithThumbnails = await Promise.all(
+    (recipes ?? []).map(async (recipe) => {
+      const firstPhoto = recipe.recipe_photos?.[0];
+      if (!firstPhoto) return { ...recipe, thumbnail_url: null };
+      const { data } = await supabase.storage
+        .from("recipe-photos")
+        .createSignedUrl(firstPhoto.storage_path, 3600);
+      return { ...recipe, thumbnail_url: data?.signedUrl ?? null };
+    })
+  );
+
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
@@ -66,9 +78,8 @@ export default async function RecipesPage({
       <RecipeSearch genres={genres ?? []} currentGenre={searchParams.genre} currentQ={searchParams.q} />
 
       <RecipeList
-        recipes={recipes ?? []}
+        recipes={recipesWithThumbnails}
         householdId={profile.household_id}
-        supabaseUrl={process.env.NEXT_PUBLIC_SUPABASE_URL!}
       />
     </div>
   );
