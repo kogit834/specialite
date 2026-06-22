@@ -11,16 +11,14 @@ type Recipe = {
   created_at: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   genres: any;
-  recipe_photos: { storage_path: string }[];
+  thumbnail_url: string | null;
 };
 
 export function RecipeList({
   recipes,
-  supabaseUrl,
 }: {
   recipes: Recipe[];
   householdId: string;
-  supabaseUrl: string;
 }) {
   if (recipes.length === 0) {
     return (
@@ -33,14 +31,9 @@ export function RecipeList({
     );
   }
 
-  function getPhotoUrl(path: string) {
-    return `${supabaseUrl}/storage/v1/object/sign/recipe-photos/${path}`;
-  }
-
   return (
     <div className="grid grid-cols-2 gap-3">
       {recipes.map((recipe) => {
-        const photo = recipe.recipe_photos?.[0];
         return (
           <Link
             key={recipe.id}
@@ -48,9 +41,9 @@ export function RecipeList({
             className="rounded-lg border bg-card overflow-hidden active:scale-95 transition-transform"
           >
             <div className="aspect-square bg-muted relative">
-              {photo ? (
+              {recipe.thumbnail_url ? (
                 <Image
-                  src={getPhotoUrl(photo.storage_path)}
+                  src={recipe.thumbnail_url}
                   alt={recipe.title}
                   fill
                   className="object-cover"
