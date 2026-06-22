@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Sparkles, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 
-type Genre = { id: string; name: string };
+type LabelItem = { id: string; name: string };
+type LabelGroup = { id: string; name: string; labels: LabelItem[] };
 
 type DraftRecipe = {
   title: string;
@@ -21,11 +22,11 @@ type DraftRecipe = {
 export function ImportForm({
   householdId,
   userId,
-  genres,
+  labelGroups,
 }: {
   householdId: string;
   userId: string;
-  genres: Genre[];
+  labelGroups: LabelGroup[];
 }) {
   const router = useRouter();
 
@@ -33,10 +34,13 @@ export function ImportForm({
   const [drafts, setDrafts] = useState<DraftRecipe[] | null>(null);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [autoGenre, setAutoGenre] = useState(false);
+  const [autoLabel, setAutoLabel] = useState(false);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState("");
 
+  const allLabels = labelGroups.flatMap((g) =>
+    g.labels.map((l) => ({ id: l.id, name: `${g.name}: ${l.name}` }))
+  );
   const selectedCount = drafts?.filter((d) => d.include).length ?? 0;
 
   async function handleParse() {
@@ -78,15 +82,15 @@ export function ImportForm({
     );
   }
 
-  async function classifyGenre(title: string, body: string): Promise<string | null> {
+  async function classifyLabel(title: string, body: string): Promise<string | null> {
     try {
       const res = await fetch("/api/classify-genre", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, body, genres }),
+        body: JSON.stringify({ title, body, labels: allLabels }),
       });
       const data = await res.json();
-      return data.genreId ?? null;
+      return data.labelId ?? null;
     } catch {
       return null;
     }
@@ -105,25 +109,34 @@ export function ImportForm({
     const supabase = createClient();
 
     try {
-      let genreMap: (string | null)[] = targets.map(() => null);
-      if (autoGenre && genres.length > 0) {
-        setProgress("ジャンルを判定中...");
-        genreMap = await Promise.all(
-          targets.map((t) => classifyGenre(t.title, t.body))
+      let labelMap: (string | null)[] = targets.map(() => null);
+      if (autoLabel && allLabels.length > 0) {
+        setProgress("ラベルを判定中...");
+        labelMap = await Promise.all(
+          targets.map((t) => classifyLabel(t.title, t.body))
         );
       }
 
       setProgress(`${targets.length}件を登録中...`);
-      const rows = targets.map((t, i) => ({
+      // idをクライアント生成し、ラベルとの対応を確実にする
+      const rows = targets.map((t) => ({
+        id: crypto.randomUUID(),
         household_id: householdId,
         title: t.title.trim(),
         body: t.body,
-        genre_id: genreMap[i],
         created_by: userId,
       }));
 
       const { error: insertErr } = await supabase.from("recipes").insert(rows);
       if (insertErr) throw new Error("登録に失敗しました");
+
+      // ラベルを recipe_labels に登録
+      const labelRows = rows
+        .map((r, i) => ({ recipe_id: r.id, label_id: labelMap[i] }))
+        .filter((row): row is { recipe_id: string; label_id: string } => Boolean(row.label_id));
+      if (labelRows.length > 0) {
+        await supabase.from("recipe_labels").insert(labelRows);
+      }
 
       router.push("/recipes");
       router.refresh();
@@ -259,15 +272,15 @@ export function ImportForm({
         ))}
       </div>
 
-      {genres.length > 0 && (
+      {allLabels.length > 0 && (
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={autoGenre}
-            onChange={(e) => setAutoGenre(e.target.checked)}
+            checked={autoLabel}
+            onChange={(e) => setAutoLabel(e.target.checked)}
             className="h-4 w-4"
           />
-          <span>ジャンルもAIで自動判定する</span>
+          <span>ラベルもAIで自動判定する</span>
         </label>
       )}
 

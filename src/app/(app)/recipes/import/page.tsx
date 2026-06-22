@@ -12,11 +12,19 @@ export default async function ImportRecipesPage() {
 
   const supabase = createClient();
 
-  const { data: genres } = await supabase
-    .from("genres")
-    .select("id, name")
+  const { data: labelGroupsRaw } = await supabase
+    .from("label_groups")
+    .select("id, name, sort_order, labels(id, name, sort_order)")
     .eq("household_id", householdId)
     .order("sort_order");
+
+  const labelGroups = (labelGroupsRaw ?? []).map((g) => ({
+    id: g.id,
+    name: g.name,
+    labels: (Array.isArray(g.labels) ? g.labels : []).sort(
+      (a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order
+    ),
+  }));
 
   return (
     <div className="p-4">
@@ -31,7 +39,7 @@ export default async function ImportRecipesPage() {
       <ImportForm
         householdId={householdId}
         userId={userId}
-        genres={genres ?? []}
+        labelGroups={labelGroups}
       />
     </div>
   );
