@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 
 type LabelItem = { id: string; name: string };
 type LabelGroup = { id: string; name: string; labels: LabelItem[] };
@@ -20,6 +20,7 @@ export function RecipeSearch({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
 
   const updateParam = useCallback(
     (key: string, value: string | undefined) => {
@@ -29,7 +30,9 @@ export function RecipeSearch({
       } else {
         params.delete(key);
       }
-      router.push(`/recipes?${params.toString()}`);
+      startTransition(() => {
+        router.push(`/recipes?${params.toString()}`);
+      });
     },
     [router, searchParams]
   );
@@ -39,7 +42,11 @@ export function RecipeSearch({
   return (
     <div className="space-y-3 mb-4">
       <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        {isPending ? (
+          <Loader2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary animate-spin" />
+        ) : (
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        )}
         <Input
           placeholder="料理名で検索..."
           defaultValue={currentQ}
@@ -57,11 +64,16 @@ export function RecipeSearch({
 
       {hasLabels && (
         <div className="space-y-2">
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div
+            className={`flex gap-2 overflow-x-auto pb-1 no-scrollbar transition-opacity ${
+              isPending ? "opacity-50" : ""
+            }`}
+          >
             <Button
               variant={!currentLabel ? "default" : "outline"}
               size="sm"
               className="shrink-0 h-8"
+              disabled={isPending}
               onClick={() => updateParam("label", undefined)}
             >
               すべて
@@ -73,6 +85,7 @@ export function RecipeSearch({
                   variant={currentLabel === label.id ? "default" : "outline"}
                   size="sm"
                   className="shrink-0 h-8"
+                  disabled={isPending}
                   onClick={() => updateParam("label", label.id)}
                 >
                   <span className="text-muted-foreground mr-1 text-xs">{group.name}/</span>
